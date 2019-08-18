@@ -8,6 +8,10 @@ from libc.stdlib cimport malloc, free
 
 log = logging.Logger(__name__)
 
+class Callback:
+    def __init__(self, callback = None, userdata = None):
+        self.callback = callback
+        self.userdata = userdata        
 
 cdef class Driver:
     cdef fp_driver *ptr
@@ -248,6 +252,8 @@ cdef class DiscoverdDevice:
 
 cdef class Device:
     cdef fp_dev *ptr
+    cdef fp_print_data **asyncGalleryArr
+
 
     def __nonzero__(self):
         return self.ptr != NULL
@@ -256,6 +262,7 @@ cdef class Device:
     cdef new(fp_dev *ptr):
         d = Device()
         d.ptr = ptr
+        d.asyncGalleryArr = NULL
         return d
 
     @staticmethod
@@ -434,6 +441,59 @@ cdef class Device:
         finally:
             free(arr)
 
+
+    """Async calls
+    """
+
+    @staticmethod
+    cdef void enroll_stage_callback(fp_dev *dev, int result, fp_print_data *_print, fp_img *img, void *user_data):
+        cdef unsigned char *pd_buf
+        cdef int pd_buf_len
+        pd = None
+        print("enroll_stage_callback", result)
+        if _print != NULL:
+            pd_buf_len = fp_print_data_get_data(_print, &pd_buf)
+            pd = PrintData.from_data(PyBytes_FromStringAndSize(<char *>pd_buf, pd_buf_len))
+        #(<object>user_data)(result, pd)
+        cb = (<object>user_data)
+        cb.callback(cb.userdata, result, pd)
+
+    def enroll_start(self, callback):
+        if not isinstance(callback, Callback):
+            raise ValueError("callback param shoud be a Callback instance")
+        if self.ptr != NULL:
+            r = fp_async_enroll_start(self.ptr, Device.enroll_stage_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while starting enrollment: %i" % r)
+
+    @staticmethod
+    cdef void enroll_stop_callback(fp_dev *dev, void *user_data):
+        #(<object>user_data)()
+        cb = (<object>user_data)
+        cb.callback(cb.userdata)
+
+    def enroll_stop(self, callback):
+        if not isinstance(callback, Callback):
+            raise ValueError("callback param shoud be a Callback instance")
+        if self.ptr != NULL:
+            r = fp_async_enroll_stop(self.ptr, Device.enroll_stop_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while stopping enrollment: %i" % r)
+
+cdef class Poll:
+    cdef fp_pollfd *ptr
+
+def handle_events_timeout(time_t sec, suseconds_t usec):
+    cdef timeval tv = timeval(tv_sec=sec, tv_usec=usec)
+    return fp_handle_events_timeout(&tv)
+
+def handle_events():
+    fp_handle_events()
+
+def get_next_timeout():
+    cdef timeval tv
+    ret = fp_get_next_timeout(&tv)
+    return (tv, ret)
 
 def init():
     if fp_init() < 0:

@@ -1,3 +1,5 @@
+# cython: language_level=3
+
 from posix.time cimport timeval
 from libc.stdint cimport uint32_t, uint16_t
 
