@@ -450,13 +450,17 @@ cdef class Device:
         cdef unsigned char *pd_buf
         cdef int pd_buf_len
         pd = None
-        print("enroll_stage_callback", result)
+        fp = None
         if _print != NULL:
             pd_buf_len = fp_print_data_get_data(_print, &pd_buf)
             pd = PrintData.from_data(PyBytes_FromStringAndSize(<char *>pd_buf, pd_buf_len))
+
+        if img != NULL:
+            fp = Image.new(img)           
+            
         #(<object>user_data)(result, pd)
         cb = (<object>user_data)
-        cb.callback(cb.userdata, result, pd)
+        cb.callback(cb.userdata, result, pd, fp)
 
     def enroll_start(self, callback):
         if not isinstance(callback, Callback):
