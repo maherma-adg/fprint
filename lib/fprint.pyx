@@ -457,7 +457,7 @@ cdef class Device:
 
         if img != NULL:
             fp = Image.new(img)           
-            
+
         #(<object>user_data)(result, pd)
         cb = (<object>user_data)
         cb.callback(cb.userdata, result, pd, fp)
@@ -483,6 +483,46 @@ cdef class Device:
             r = fp_async_enroll_stop(self.ptr, Device.enroll_stop_callback, <void *>callback)
             if r < 0:
                 raise RuntimeError("Internal I/O error while stopping enrollment: %i" % r)
+
+    @staticmethod
+    cdef void identify_callback(fp_dev *dev, int result, size_t match_offset, fp_img *img, void *user_data):
+        fp = None
+        if img != NULL:
+            fp = Image.new(img)
+
+        #(<object>user_data)
+        cb = (<object>user_data)
+        cb.callback(cb.userdata, result, match_offset, fp)
+
+    def identify_start(self, callback, gallery):
+        cdef size_t off
+        cdef size_t n
+
+        if self.ptr != NULL:
+            off = 0
+            n = len(gallery) + 1
+            self.asyncGalleryArr = <fp_print_data **>malloc(n * sizeof(void*))
+            self.asyncGalleryArr[n - 1] = NULL
+            for idx, pd in enumerate(gallery):
+                self.asyncGalleryArr[idx] = (<PrintData>pd).ptr
+            r = fp_async_identify_start(self.ptr, self.asyncGalleryArr, Device.identify_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while starting identification: %i" % r)
+
+    @staticmethod
+    cdef void identify_stop_callback(fp_dev *dev, void *user_data):
+        #(<object>user_data)()
+        cb = (<object>user_data)
+        cb.callback(cb.userdata)
+
+    def identify_stop(self, callback):
+        if self.ptr != NULL:
+            r = fp_async_identify_stop(self.ptr, Device.identify_stop_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while stopping identification: %i" % r)
+            free(self.asyncGalleryArr)
+            self.asyncGalleryArr = NULL
+    
 
 cdef class Poll:
     cdef fp_pollfd *ptr
