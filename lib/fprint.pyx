@@ -92,6 +92,11 @@ cdef class PrintData:
             buf_len = fp_print_data_get_data(self.ptr, &buf)
             return PyBytes_FromStringAndSize(<char *>buf, buf_len)
 
+    def transfer(self, PrintData pd):
+        if self.ptr != NULL:
+            pd.ptr = self.ptr
+            self.ptr = NULL
+
     def save(self, fp_finger finger):
         if self.ptr != NULL:
             return fp_print_data_save(self.ptr, finger)
