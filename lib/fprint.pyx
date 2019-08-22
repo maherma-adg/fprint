@@ -450,6 +450,7 @@ cdef class Device:
     """Async calls
     """
 
+    # Enroll Asybc
     @staticmethod
     cdef void enroll_stage_callback(fp_dev *dev, int result, fp_print_data *_print, fp_img *img, void *user_data):
         cdef unsigned char *pd_buf
@@ -489,6 +490,41 @@ cdef class Device:
             if r < 0:
                 raise RuntimeError("Internal I/O error while stopping enrollment: %i" % r)
 
+
+    # Capture Asybc
+    @staticmethod
+    cdef void capture_callback(fp_dev *dev, int result, fp_img *img, void *user_data):
+        fp = None
+        if img != NULL:
+            fp = Image.new(img)           
+
+        #(<object>user_data)(result, pd)
+        cb = (<object>user_data)
+        cb.callback(cb.userdata, result, fp)
+
+    def capture_start(self, unconditional, callback):
+        if not isinstance(callback, Callback):
+            raise ValueError("callback param shoud be a Callback instance")
+        if self.ptr != NULL:
+            r = fp_async_capture_start(self.ptr, unconditional, Device.capture_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while starting capture: %i" % r)
+
+    @staticmethod
+    cdef void capture_stop_callback(fp_dev *dev, void *user_data):
+        #(<object>user_data)()
+        cb = (<object>user_data)
+        cb.callback(cb.userdata)
+
+    def capture_stop(self, callback):
+        if not isinstance(callback, Callback):
+            raise ValueError("callback param shoud be a Callback instance")
+        if self.ptr != NULL:
+            r = fp_async_capture_stop(self.ptr, Device.capture_stop_callback, <void *>callback)
+            if r < 0:
+                raise RuntimeError("Internal I/O error while stopping capture: %i" % r)
+
+    # Idenfity Asybc
     @staticmethod
     cdef void identify_callback(fp_dev *dev, int result, size_t match_offset, fp_img *img, void *user_data):
         fp = None
